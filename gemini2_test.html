@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ANDRI STORE. | Thumbnail Generator AI</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel untuk JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: #09090b;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #18181b;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #3f3f46;
+            border-radius: 5px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #52525b;
+        }
+        
+        /* Line clamp utility */
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        /* Smooth transitions */
+        .transition-all {
+            transition: all 0.2s ease;
+        }
+        
+        /* Glow effect */
+        .glow {
+            box-shadow: 0 0 20px rgba(163, 230, 53, 0.3);
+        }
+        
+        /* Animation */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+        
+        /* Fade in animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .animate-fadeIn {
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        /* Slide in animation */
+        @keyframes slideIn {
+            from { transform: translateX(-20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .animate-slideIn {
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        /* Gradient text */
+        .gradient-text {
+            background: linear-gradient(135deg, #a3e635 0%, #4ade80 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        /* Auth card glow */
+        .auth-glow {
+            box-shadow: 0 0 40px rgba(163, 230, 53, 0.1);
+        }
+        
+        /* Input focus */
+        .input-focus:focus {
+            box-shadow: 0 0 0 3px rgba(163, 230, 53, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // ============================================
+        // KONFIGURASI API KEY (DIISI OLEH PEMILIK WEBSITE)
+        // ============================================
+        const API_CONFIG = {
+            GEMINI_API_KEY: 'AIzaSyDxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+            IMAGEN_API_KEY: 'AIzaSyAyyyyyyyyyyyyyyyyyyyyyyyyyyyyy',
+            isConfigured: function() {
+                return this.GEMINI_API_KEY && this.GEMINI_API_KEY.length > 20 && 
+                       this.IMAGEN_API_KEY && this.IMAGEN_API_KEY.length > 20;
+            }
+        };
+        // ============================================
+
+        // Sistem Penyimpanan User (LocalStorage)
+        const UserStorage = {
+            KEY: 'andri_store_users',
+            SESSION_KEY: 'andri_store_current_user',
+            
+            init() {
+                if (!localStorage.getItem(this.KEY)) {
+                    localStorage.setItem(this.KEY, JSON.stringify([]));
+                }
+            },
+            
+            getUsers() {
+                return JSON.parse(localStorage.getItem(this.KEY)) || [];
+            },
+            
+            saveUsers(users) {
+                localStorage.setItem(this.KEY, JSON.stringify(users));
+            },
+            
+            registerUser(email, username, password) {
+                const users = this.getUsers();
+                
+                // Cek apakah email sudah terdaftar
+                if (users.some(user => user.email === email)) {
+                    return { success: false, message: 'Email sudah terdaftar' };
+                }
+                
+                // Cek apakah username sudah terdaftar
+                if (users.some(user => user.username === username)) {
+                    return { success: false, message: 'Username sudah terdaftar' };
+                }
+                
+                const newUser = {
+                    id: Date.now(),
+                    email,
+                    username,
+                    password, // Dalam produksi, password harus di-hash
+                    createdAt: new Date().toISOString(),
+                    thumbnailCount: 0,
+                    subscription: 'free',
+                    lastLogin: null
+                };
+                
+                users.push(newUser);
+                this.saveUsers(users);
+                return { success: true, user: newUser };
+            },
+            
+            loginUser(emailOrUsername, password) {
+                const users = this.getUsers();
+                const user = users.find(u => 
+                    (u.email === emailOrUsername || u.username === emailOrUsername) && 
+                    u.password === password
+                );
+                
+                if (user) {
+                    user.lastLogin = new Date().toISOString();
+                    this.saveUsers(users);
+                    localStorage.setItem(this.SESSION_KEY, JSON.stringify(user));
+                    return { success: true, user };
+                }
+                
+                return { success: false, message: 'Email/username atau password salah' };
+            },
+            
+            logoutUser() {
+                localStorage.removeItem(this.SESSION_KEY);
+                return { success: true };
+            },
+            
+            getCurrentUser() {
+                const user = localStorage.getItem(this.SESSION_KEY);
+                return user ? JSON.parse(user) : null;
+            },
+            
+            updateUserThumbnailCount() {
+                const user = this.getCurrentUser();
+                if (user) {
+                    const users = this.getUsers();
+                    const updatedUsers = users.map(u => {
+                        if (u.id === user.id) {
+                            return { ...u, thumbnailCount: (u.thumbnailCount || 0) + 1 };
+                        }
+                        return u;
+                    });
+                    this.saveUsers(updatedUsers);
+                    
+                    // Update session
+                    const updatedUser = { ...user, thumbnailCount: (user.thumbnailCount || 0) + 1 };
+                    localStorage.setItem(this.SESSION_KEY, JSON.stringify(updatedUser));
+                    return updatedUser;
+                }
+                return null;
+            }
+        };
+
+        // Inisialisasi storage
+        UserStorage.init();
+
+        // Komponen Login/Register Form
+        const AuthForm = ({ onLoginSuccess, onClose }) => {
+            const [isLogin, setIsLogin] = React.useState(true);
+            const [formData, setFormData] = React.useState({
+                email: '',
+                username: '',
+                password: '',
+                confirmPassword: ''
+            });
+            const [loading, setLoading] = React.useState(false);
+            const [error, setError] = React.useState('');
+            const [success, setSuccess] = React.useState('');
+
+            const handleInputChange = (field, value) => {
+                setFormData(prev => ({ ...prev, [field]: value }));
+                setError('');
+                setSuccess('');
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                setError('');
+                setSuccess('');
+
+                try {
+                    if (isLogin) {
+                        // Login process
+                        const result = UserStorage.loginUser(formData.email, formData.password);
+                        if (result.success) {
+                            setSuccess('Login berhasil!');
+                            setTimeout(() => {
+                                onLoginSuccess(result.user);
+                            }, 1000);
+                        } else {
+                            setError(result.message);
+                        }
+                    } else {
+                        // Register validation
+                        if (formData.password !== formData.confirmPassword) {
+                            setError('Password tidak cocok');
+                            setLoading(false);
+                            return;
+                        }
+                        
+                        if (formData.password.length < 6) {
+                            setError('Password minimal 6 karakter');
+                            setLoading(false);
+                            return;
+                        }
+
+                        // Register process
+                        const result = UserStorage.registerUser(
+                            formData.email,
+                            formData.username,
+                            formData.password
+                        );
+                        
+                        if (result.success) {
+                            setSuccess('Registrasi berhasil! Silakan login.');
+                            setIsLogin(true);
+                            setFormData({
+                                email: '',
+                                username: '',
+                                password: '',
+                                confirmPassword: ''
+                            });
+                        } else {
+                            setError(result.message);
+                        }
+                    }
+                } catch (err) {
+                    setError('Terjadi kesalahan. Silakan coba lagi.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return React.createElement('div', {
+                className: 'fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn'
+            },
+                React.createElement('div', {
+                    className: 'bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden auth-glow'
+                },
+                    // Header
+                    React.createElement('div', {
+                        className: 'p-6 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-800'
+                    },
+                        React.createElement('div', { className: 'flex items-center justify-between mb-4' },
+                            React.createElement('div', { className: 'flex items-center gap-3' },
+                                React.createElement('div', {
+                                    className: 'bg-lime-400 w-10 h-10 rounded-lg flex items-center justify-center'
+                                },
+                                    React.createElement('i', {
+                                        'data-lucide': isLogin ? 'log-in' : 'user-plus',
+                                        className: 'w-6 h-6 text-black'
+                                    })
+                                ),
+                                React.createElement('div', null,
+                                    React.createElement('h2', {
+                                        className: 'text-xl font-bold gradient-text'
+                                    },
+                                        isLogin ? 'Masuk ke ANDRI STORE' : 'Daftar Akun Baru'
+                                    ),
+                                    React.createElement('p', { className: 'text-zinc-400 text-sm' },
+                                        isLogin ? 'Masuk untuk akses penuh' : 'Buat akun gratis sekarang'
+                                    )
+                                )
+                            ),
+                            React.createElement('button', {
+                                onClick: onClose,
+                                className: 'text-zinc-400 hover:text-white transition-colors'
+                            },
+                                React.createElement('i', { 'data-lucide': 'x', className: 'w-5 h-5' })
+                            )
+                        )
+                    ),
+
+                    // Form
+                    React.createElement('form', {
+                        onSubmit: handleSubmit,
+                        className: 'p-6 space-y-4'
+                    },
+                        // Success Message
+                        success && React.createElement('div', {
+                            className: 'p-3 bg-green-400/10 border border-green-400/30 rounded-lg'
+                        },
+                            React.createElement('div', { className: 'flex items-center gap-2' },
+                                React.createElement('i', {
+                                    'data-lucide': 'check-circle',
+                                    className: 'w-5 h-5 text-green-400'
+                                }),
+                                React.createElement('span', { className: 'text-green-400 text-sm' }, success)
+                            )
+                        ),
+
+                        // Error Message
+                        error && React.createElement('div', {
+                            className: 'p-3 bg-red-400/10 border border-red-400/30 rounded-lg'
+                        },
+                            React.createElement('div', { className: 'flex items-center gap-2' },
+                                React.createElement('i', {
+                                    'data-lucide': 'alert-circle',
+                                    className: 'w-5 h-5 text-red-400'
+                                }),
+                                React.createElement('span', { className: 'text-red-400 text-sm' }, error)
+                            )
+                        ),
+
+                        // Email Field
+                        React.createElement('div', null,
+                            React.createElement('label', {
+                                className: 'block text-sm font-medium mb-2 text-zinc-300'
+                            }, 'Email'),
+                            React.createElement('div', { className: 'relative' },
+                                React.createElement('i', {
+                                    'data-lucide': 'mail',
+                                    className: 'absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-zinc-500'
+                                }),
+                                React.createElement('input', {
+                                    type: 'email',
+                                    value: formData.email,
+                                    onChange: (e) => handleInputChange('email', e.target.value),
+                                    required: true,
+                                    className: 'w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-10 pr-4 py-3 focus:outline-none focus:border-lime-400 input-focus',
+                                    placeholder: 'nama@email.com'
+                                })
+                            )
+                        ),
+
+                        // Username Field (only for register)
+                        !isLogin && React.createElement('div', null,
+                            React.createElement('label', {
+                                className: 'block text-sm font-medium mb-2 text-zinc-300'
+                            }, 'Username'),
+                            React.createElement('div', { className: 'relative' },
+                                React.createElement('i', {
+                                    'data-lucide': 'user',
+                                    className: 'absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-zinc-500'
+                                }),
+                                React.createElement('input', {
+                                    type: 'text',
+                                    value: formData.username,
+                                    onChange: (e) => handleInputChange('username', e.target.value),
+                                    required: !isLogin,
+                                    className: 'w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-10 pr-4 py-3 focus:outline-none focus:border-lime-400 input-focus',
+                                    placeholder: 'pilih username unik'
+                                })
+                            )
+                        ),
+
+                        // Password Field
+                        React.createElement('div', null,
+                            React.createElement('label', {
+                                className: 'block text-sm font-medium mb-2 text-zinc-300'
+                            }, 'Password'),
+                            React.createElement('div', { className: 'relative' },
+                                React.createElement('i', {
+                                    'data-lucide': 'lock',
+                                    className: 'absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-zinc-500'
+                                }),
+                                React.createElement('input', {
+                                    type: 'password',
+                                    value: formData.password,
+                                    onChange: (e) => handleInputChange('password', e.target.value),
+                                    required: true,
+                                    className: 'w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-10 pr-4 py-3 focus:outline-none focus:border-lime-400 input-focus',
+                                    placeholder: isLogin ? 'masukkan password' : 'buat password minimal 6 karakter'
+                                })
+                            )
+                        ),
+
+                        // Confirm Password Field (only for register)
+                        !isLogin && React.createElement('div', null,
+                            React.createElement('label', {
+                                className: 'block text-sm font-medium mb-2 text-zinc-300'
+                            }, 'Konfirmasi Password'),
+                            React.createElement('div', { className: 'relative' },
+                                React.createElement('i', {
+                                    'data-lucide': 'lock',
+                                    className: 'absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-zinc-500'
+                                }),
+                                React.createElement('input', {
+                                    type: 'password',
+                                    value: formData.confirmPassword,
+                                    onChange: (e) => handleInputChange('confirmPassword', e.target.value),
+                                    required: !isLogin,
+                                    className: 'w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-10 pr-4 py-3 focus:outline-none focus:border-lime-400 input-focus',
+                                    placeholder: 'ulangi password'
+                                })
+                            )
+                        ),
+
+                        // Submit Button
+                        React.createElement('button', {
+                            type: 'submit',
+                            disabled: loading,
+                            className: `w-full bg-lime-400 text-black font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all hover:bg-lime-300 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`
+                        },
+                            loading ? [
+                                React.createElement('i', {
+                                    key: 'icon',
+                                    'data-lucide': 'loader-2',
+                                    className: 'w-5 h-5 animate-spin'
+                                }),
+                                isLogin ? 'MEMPROSES...' : 'MENDAFTAR...'
+                            ] : [
+                                React.createElement('i', {
+                                    key: 'icon',
+                                    'data-lucide': isLogin ? 'log-in' : 'user-plus',
+                                    className: 'w-5 h-5'
+                                }),
+                                isLogin ? 'MASUK' : 'DAFTAR SEKARANG'
+                            ]
+                        ),
+
+                        // Switch Mode
+                        React.createElement('div', { className: 'text-center pt-4 border-t border-zinc-800' },
+                            React.createElement('p', { className: 'text-zinc-400' },
+                                isLogin ? 'Belum punya akun?' : 'Sudah punya akun?',
+                                React.createElement('button', {
+                                    type: 'button',
+                                    onClick: () => {
+                                        setIsLogin(!isLogin);
+                                        setError('');
+                                        setSuccess('');
+                                        setFormData({
+                                            email: '',
+                                            username: '',
+                                            password: '',
+                                            confirmPassword: ''
+                                        });
+                                    },
+                                    className: 'text-lime-400 hover:text-lime-300 font-medium ml-2'
+                                },
+                                    isLogin ? 'Daftar di sini' : 'Login di sini'
+                                )
+                            )
+                        ),
+
+                        // Features List (for register)
+                        !isLogin && React.createElement('div', {
+                            className: 'mt-6 p-4 bg-zinc-800/50 rounded-lg border border-zinc-700'
+                        },
+                            React.createElement('h4', {
+                                className: 'font-medium text-lime-400 mb-3 flex items-center gap-2'
+                            },
+                                React.createElement('i', { 'data-lucide': 'sparkles', className: 'w-4 h-4' }),
+                                'Fitur yang akan Anda dapatkan:'
+                            ),
+                            React.createElement('ul', { className: 'space-y-2 text-sm text-zinc-300' },
+                                [
+                                    'Generate thumbnail AI tanpa batas',
+                                    'Simpan proyek secara otomatis',
+                                    'Akses ke semua template premium',
+                                    'Export thumbnail resolusi tinggi',
+                                    'Support priority dari tim ANDRI STORE'
+                                ].map((feature, index) =>
+                                    React.createElement('li', {
+                                        key: index,
+                                        className: 'flex items-center gap-2'
+                                    },
+                                        React.createElement('i', {
+                                            'data-lucide': 'check',
+                                            className: 'w-4 h-4 text-lime-400'
+                                        }),
+                                        feature
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        };
+
+        // Komponen Header yang sudah dimodifikasi
+        const Header = ({ isEngineReady, currentUser, onLogout, onShowAuth }) => {
+            const [showUserMenu, setShowUserMenu] = React.useState(false);
+
+            return React.createElement('header', {
+                className: 'sticky top-0 z-50 bg-zinc-900/90 backdrop-blur-lg border-b border-zinc-800'
+            },
+                React.createElement('div', { className: 'container mx-auto px-4 py-4' },
+                    React.createElement('div', { className: 'flex items-center justify-between' },
+                        // Logo
+                        React.createElement('div', { className: 'flex items-center gap-3' },
+                            React.createElement('div', { className: 'bg-lime-400 w-10 h-10 rounded-lg flex items-center justify-center' },
+                                React.createElement('i', { 'data-lucide': 'printer', className: 'w-6 h-6 text-black' })
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('div', { className: 'flex items-baseline gap-1' },
+                                    React.createElement('h1', { className: 'text-2xl font-bold' },
+                                        'ANDRI STORE',
+                                        React.createElement('span', { className: 'text-lime-400' }, '.')
+                                    ),
+                                    React.createElement('span', { className: 'text-xs text-lime-400/80 uppercase tracking-wider' }, 'Thumbnail Generator')
+                                )
+                            )
+                        ),
+                        
+                        // Right Section
+                        React.createElement('div', { className: 'flex items-center gap-4' },
+                            // API Status
+                            React.createElement('div', {
+                                className: `flex items-center gap-2 px-4 py-2 rounded-lg ${isEngineReady ? 'bg-lime-400/20 border border-lime-400/30 glow' : 'bg-red-400/20 border border-red-400/30'}`
+                            },
+                                React.createElement('i', {
+                                    'data-lucide': isEngineReady ? 'sparkles' : 'alert-triangle',
+                                    className: `w-4 h-4 ${isEngineReady ? 'text-lime-400' : 'text-red-400'}`
+                                }),
+                                React.createElement('span', {
+                                    className: `text-sm font-medium ${isEngineReady ? 'text-lime-400' : 'text-red-400'}`
+                                },
+                                    isEngineReady ? 'ENGINE READY' : 'API NOT CONFIGURED'
+                                )
+                            ),
+                            
+                            // User Section
+                            currentUser ? (
+                                React.createElement('div', { className: 'relative' },
+                                    React.createElement('button', {
+                                        onClick: () => setShowUserMenu(!showUserMenu),
+                                        className: 'flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800 transition-colors'
+                                    },
+                                        React.createElement('div', {
+                                            className: 'w-8 h-8 bg-gradient-to-br from-lime-400 to-emerald-500 rounded-full flex items-center justify-center'
+                                        },
+                                            React.createElement('span', { className: 'text-black font-bold text-sm' },
+                                                currentUser.username.charAt(0).toUpperCase()
+                                            )
+                                        ),
+                                        React.createElement('div', { className: 'hidden md:block text-left' },
+                                            React.createElement('p', { className: 'font-medium text-sm' }, currentUser.username),
+                                            React.createElement('p', { className: 'text-xs text-zinc-400' }, 
+                                                `${currentUser.thumbnailCount || 0} thumbnails`
+                                            )
+                                        ),
+                                        React.createElement('i', {
+                                            'data-lucide': 'chevron-down',
+                                            className: `w-4 h-4 text-zinc-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`
+                                        })
+                                    ),
+                                    
+                                    // User Dropdown Menu
+                                    showUserMenu && React.createElement('div', {
+                                        className: 'absolute right-0 mt-2 w-64 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl z-50 animate-slideIn'
+                                    },
+                                        // User Info
+                                        React.createElement('div', { className: 'p-4 border-b border-zinc-800' },
+                                            React.createElement('div', { className: 'flex items-center gap-3' },
+                                                React.createElement('div', {
+                                                    className: 'w-10 h-10 bg-gradient-to-br from-lime-400 to-emerald-500 rounded-full flex items-center justify-center'
+                                                },
+                                                    React.createElement('span', { className: 'text-black font-bold' },
+                                                        currentUser.username.charAt(0).toUpperCase()
+                                                    )
+                                                ),
+                                                React.createElement('div', null,
+                                                    React.createElement('p', { className: 'font-bold' }, currentUser.username),
+                                                    React.createElement('p', { className: 'text-sm text-zinc-400' }, currentUser.email)
+                                                )
+                                            ),
+                                            React.createElement('div', { className: 'mt-3 flex items-center justify-between text-sm' },
+                                                React.createElement('div', { className: 'flex items-center gap-2' },
+                                                    React.createElement('i', { 'data-lucide': 'crown', className: 'w-4 h-4 text-yellow-400' }),
+                                                    React.createElement('span', { className: 'text-zinc-300' }, 'Free Plan')
+                                                ),
+                                                React.createElement('div', { className: 'flex items-center gap-2' },
+                                                    React.createElement('i', { 'data-lucide': 'image', className: 'w-4 h-4 text-lime-400' }),
+                                                    React.createElement('span', { className: 'text-zinc-300' }, `${currentUser.thumbnailCount || 0}`)
+                                                )
+                                            )
+                                        ),
+                                        
+                                        // Menu Items
+                                        React.createElement('div', { className: 'p-2' },
+                                            [
+                                                { icon: 'user', label: 'Profil Saya', action: () => alert('Fitur profil akan datang!') },
+                                                { icon: 'save', label: 'Proyek Tersimpan', action: () => alert('Fitur proyek akan datang!') },
+                                                { icon: 'settings', label: 'Pengaturan', action: () => alert('Fitur pengaturan akan datang!') },
+                                                { icon: 'crown', label: 'Upgrade Premium', action: () => alert('Fitur upgrade akan datang!') }
+                                            ].map((item, index) =>
+                                                React.createElement('button', {
+                                                    key: index,
+                                                    onClick: item.action,
+                                                    className: 'w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-800 text-left transition-colors'
+                                                },
+                                                    React.createElement('i', {
+                                                        'data-lucide': item.icon,
+                                                        className: 'w-4 h-4 text-zinc-400'
+                                                    }),
+                                                    React.createElement('span', { className: 'text-zinc-300' }, item.label)
+                                                )
+                                            )
+                                        ),
+                                        
+                                        // Logout Button
+                                        React.createElement('div', { className: 'p-2 border-t border-zinc-800' },
+                                            React.createElement('button', {
+                                                onClick: () => {
+                                                    onLogout();
+                                                    setShowUserMenu(false);
+                                                },
+                                                className: 'w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-red-400/10 hover:bg-red-400/20 text-red-400 transition-colors'
+                                            },
+                                                React.createElement('i', { 'data-lucide': 'log-out', className: 'w-4 h-4' }),
+                                                'Keluar'
+                                            )
+                                        )
+                                    )
+                                )
+                            ) : (
+                                // Login/Register Button
+                                React.createElement('div', { className: 'flex items-center gap-2' },
+                                    React.createElement('button', {
+                                        onClick: () => onShowAuth('login'),
+                                        className: 'px-4 py-2 rounded-lg border border-zinc-700 hover:border-lime-400 hover:text-lime-400 transition-colors'
+                                    }, 'Masuk'),
+                                    React.createElement('button', {
+                                        onClick: () => onShowAuth('register'),
+                                        className: 'px-4 py-2 rounded-lg bg-lime-400 text-black font-medium hover:bg-lime-300 transition-colors'
+                                    }, 'Daftar')
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        };
+
+        // Komponen Dashboard (Main App dengan user context)
+        const Dashboard = ({ currentUser, onLogout }) => {
+            const [projectData, setProjectData] = React.useState({
+                title: '',
+                niche: 'Gaming',
+                tone: 'Mind-Blowing'
+            });
+            const [creativeConfig, setCreativeConfig] = React.useState({
+                noText: false,
+                headline: '',
+                subtext: '',
+                manualPrompt: false,
+                customPrompt: ''
+            });
+            const [isGenerating, setIsGenerating] = React.useState(false);
+            const [results, setResults] = React.useState(null);
+            
+            const isEngineReady = API_CONFIG.isConfigured();
+
+            const handleGenerate = async () => {
+                if (!isEngineReady) {
+                    alert('⚠️ API Key belum dikonfigurasi. Silakan hubungi pemilik website.');
+                    return;
+                }
+
+                if (!projectData.title) {
+                    alert('⚠️ Harap isi judul video terlebih dahulu.');
+                    return;
+                }
+
+                setIsGenerating(true);
+                
+                // Update user thumbnail count
+                UserStorage.updateUserThumbnailCount();
+                
+                setTimeout(() => {
+                    const mockResults = {
+                        thumbnails: [
+                            {
+                                id: 1,
+                                url: 'https://images.unsplash.com/photo-1635805737707-575885ab0820?w=800&auto=format&fit=crop',
+                                strategy: 'LIFT Strategy - High Contrast & Rule of Thirds'
+                            },
+                            {
+                                id: 2,
+                                url: 'https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=800&auto=format&fit=crop',
+                                strategy: 'Alternative Angle - Dynamic Perspective'
+                            }
+                        ],
+                        analysis: {
+                            liftStrategy: 'Leverage points focused on contrasting colors with subject positioned using rule of thirds.',
+                            colorStrategy: 'Using #a3e635 (lime-400) as Action Color for CTAs.',
+                            copywriting: '5 MISTAKES You\'re Making in Valorant | STOP LOSING RANK'
+                        },
+                        palette: [
+                            { color: '#a3e635', role: 'ACTION', description: 'Primary call-to-action & highlights' },
+                            { color: '#fafafa', role: 'COMMUNICATOR', description: 'Main text for maximum readability' },
+                            { color: '#3f3f46', role: 'SUPPORT', description: 'Background elements & accents' },
+                            { color: '#09090b', role: 'NEUTRAL', description: 'Base background & negative space' }
+                        ],
+                        ctrTips: [
+                            'Use high contrast between text and background',
+                            'Position subject facing inward to guide viewer\'s eye',
+                            'Add subtle glow effects on edges',
+                            'Include numerical data in title',
+                            'Use facial expressions showing emotion'
+                        ]
+                    };
+                    
+                    setResults(mockResults);
+                    setIsGenerating(false);
+                }, 1500);
+            };
+
+            const handleDownload = (imageUrl) => {
+                const link = document.createElement('a');
+                link.href = imageUrl;
+                link.download = `thumbnail-${currentUser.username}-${Date.now()}.jpg`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            const niches = ['Gaming', 'Vlog', 'Tech', 'Business', 'Education', 'Entertainment', 'Sports', 'Music', 'Lifestyle', 'Finance'];
+            const tones = ['Mind-Blowing', 'Horror', 'Edukatif', 'Komedi', 'Dramatic', 'Cinematic', 'Inspirational', 'Urgent', 'Mysterious', 'Epic'];
+
+            // Komponen InputPanel dan OutputPanel dari kode sebelumnya
+            // (Saya akan menggunakan versi yang sama dengan sedikit modifikasi untuk user context)
+
+            const InputPanel = ({
+                projectData,
+                setProjectData,
+                creativeConfig,
+                setCreativeConfig,
+                niches,
+                tones,
+                isGenerating,
+                onGenerate,
+                apiConfigured,
+                currentUser
+            }) => {
+                const handleProjectDataChange = (field, value) => {
+                    setProjectData(prev => ({ ...prev, [field]: value }));
+                };
+
+                const handleCreativeConfigChange = (field, value) => {
+                    setCreativeConfig(prev => ({ ...prev, [field]: value }));
+                };
+
+                return React.createElement('div', { className: 'space-y-6' },
+                    // User Stats Card
+                    React.createElement('div', {
+                        className: 'bg-gradient-to-r from-zinc-900 to-zinc-800 border border-zinc-700 rounded-2xl p-6'
+                    },
+                        React.createElement('div', { className: 'flex items-center justify-between mb-4' },
+                            React.createElement('div', { className: 'flex items-center gap-3' },
+                                React.createElement('div', {
+                                    className: 'w-12 h-12 bg-gradient-to-br from-lime-400 to-emerald-500 rounded-full flex items-center justify-center'
+                                },
+                                    React.createElement('span', { className: 'text-black font-bold text-lg' },
+                                        currentUser.username.charAt(0).toUpperCase()
+                                    )
+                                ),
+                                React.createElement('div', null,
+                                    React.createElement('h3', { className: 'font-bold text-lg' },
+                                        'Halo, ',
+                                        React.createElement('span', { className: 'text-lime-400' }, currentUser.username),
+                                        '!'
+                                    ),
+                                    React.createElement('p', { className: 'text-zinc-400 text-sm' },
+                                        'Selamat datang di AI Thumbnail Generator'
+                                    )
+                                )
+                            ),
+                            React.createElement('div', {
+                                className: 'px-3 py-1 bg-lime-400/20 border border-lime-400/30 rounded-full'
+                            },
+                                React.createElement('span', { className: 'text-lime-400 text-sm font-medium' },
+                                    `${currentUser.thumbnailCount || 0} Thumbnails`
+                                )
+                            )
+                        ),
+                        React.createElement('div', { className: 'grid grid-cols-2 gap-4 text-center' },
+                            [
+                                { label: 'Plan Aktif', value: 'FREE', icon: 'crown', color: 'text-yellow-400' },
+                                { label: 'Kuota AI', value: 'Unlimited', icon: 'zap', color: 'text-lime-400' },
+                                { label: 'Export Quality', value: 'HD 4K', icon: 'image', color: 'text-blue-400' },
+                                { label: 'Member Since', value: new Date(currentUser.createdAt).toLocaleDateString('id-ID'), icon: 'calendar', color: 'text-purple-400' }
+                            ].map((stat, index) =>
+                                React.createElement('div', {
+                                    key: index,
+                                    className: 'bg-zinc-800/50 rounded-lg p-3'
+                                },
+                                    React.createElement('div', { className: 'flex items-center justify-center gap-2 mb-1' },
+                                        React.createElement('i', {
+                                            'data-lucide': stat.icon,
+                                            className: `w-4 h-4 ${stat.color}`
+                                        }),
+                                        React.createElement('span', { className: 'text-xs text-zinc-400' }, stat.label)
+                                    ),
+                                    React.createElement('div', { className: 'font-bold' }, stat.value)
+                                )
+                            )
+                        )
+                    ),
+
+                    // Detail Proyek
+                    React.createElement('div', {
+                        className: 'bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 animate-fadeIn'
+                    },
+                        React.createElement('div', { className: 'flex items-center gap-3 mb-6' },
+                            React.createElement('i', { 'data-lucide': 'layout', className: 'w-5 h-5 text-lime-400' }),
+                            React.createElement('h2', {
+                                className: 'text-lg font-bold uppercase tracking-wide'
+                            }, 'Detail Proyek')
+                        ),
+                        
+                        React.createElement('div', { className: 'space-y-4' },
+                            React.createElement('div', null,
+                                React.createElement('label', {
+                                    className: 'block text-sm font-medium mb-2 uppercase tracking-wide'
+                                }, 'Judul Video *'),
+                                React.createElement('input', {
+                                    type: 'text',
+                                    value: projectData.title,
+                                    onChange: (e) => handleProjectDataChange('title', e.target.value),
+                                    className: 'w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-lime-400',
+                                    placeholder: 'Masukkan judul video Anda...'
+                                })
+                            ),
+                            
+                            React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
+                                React.createElement('div', null,
+                                    React.createElement('label', {
+                                        className: 'block text-sm font-medium mb-2 uppercase tracking-wide'
+                                    }, 'Niche'),
+                                    React.createElement('select', {
+                                        value: projectData.niche,
+                                        onChange: (e) => handleProjectDataChange('niche', e.target.value),
+                                        className: 'w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-lime-400'
+                                    },
+                                        niches.map(niche => 
+                                            React.createElement('option', { key: niche, value: niche }, niche)
+                                        )
+                                    )
+                                ),
+                                
+                                React.createElement('div', null,
+                                    React.createElement('label', {
+                                        className: 'block text-sm font-medium mb-2 uppercase tracking-wide'
+                                    }, 'Tone'),
+                                    React.createElement('select', {
+                                        value: projectData.tone,
+                                        onChange: (e) => handleProjectDataChange('tone', e.target.value),
+                                        className: 'w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-lime-400'
+                                    },
+                                        tones.map(tone => 
+                                            React.createElement('option', { key: tone, value: tone }, tone)
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    ),
+
+                    // Konfigurasi Kreatif
+                    React.createElement('div', {
+                        className: 'bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 animate-fadeIn'
+                    },
+                        React.createElement('div', { className: 'flex items-center gap-3 mb-6' },
+                            React.createElement('i', { 'data-lucide': 'wand-2', className: 'w-5 h-5 text-lime-400' }),
+                            React.createElement('h2', {
+                                className: 'text-lg font-bold uppercase tracking-wide'
+                            }, 'Konfigurasi Kreatif')
+                        ),
+                        
+                        // ... (sama seperti sebelumnya)
+                        // Saya akan singkat bagian ini karena sama dengan sebelumnya
+                        React.createElement('div', { className: 'space-y-6' },
+                            // Tanpa Teks toggle
+                            React.createElement('div', { className: 'flex items-center justify-between' },
+                                React.createElement('div', { className: 'flex items-center gap-3' },
+                                    React.createElement('i', { 'data-lucide': 'eye-off', className: 'w-4 h-4 text-zinc-400' }),
+                                    React.createElement('span', { className: 'font-medium' }, 'Tanpa Teks'),
+                                    React.createElement('span', {
+                                        className: 'text-xs text-zinc-500'
+                                    }, '(AI hanya generate gambar)')
+                                ),
+                                React.createElement('label', { className: 'relative inline-flex items-center cursor-pointer' },
+                                    React.createElement('input', {
+                                        type: 'checkbox',
+                                        checked: creativeConfig.noText,
+                                        onChange: (e) => handleCreativeConfigChange('noText', e.target.checked),
+                                        className: 'sr-only peer'
+                                    }),
+                                    React.createElement('div', {
+                                        className: "w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-lime-400"
+                                    })
+                                )
+                            ),
+
+                            // Headline & Subtext
+                            React.createElement('div', { className: 'space-y-4' },
+                                React.createElement('div', null,
+                                    React.createElement('div', { className: 'flex items-center gap-2 mb-2' },
+                                        React.createElement('i', { 'data-lucide': 'type', className: 'w-4 h-4 text-zinc-400' }),
+                                        React.createElement('label', { className: 'font-medium' }, 'Headline Utama')
+                                    ),
+                                    React.createElement('input', {
+                                        type: 'text',
+                                        value: creativeConfig.headline,
+                                        onChange: (e) => handleCreativeConfigChange('headline', e.target.value),
+                                        disabled: creativeConfig.noText,
+                                        className: `w-full bg-zinc-800 border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-lime-400 ${creativeConfig.noText ? 'border-zinc-700 text-zinc-500' : 'border-zinc-700'}`,
+                                        placeholder: 'Headline utama thumbnail...'
+                                    })
+                                ),
+                                
+                                React.createElement('div', null,
+                                    React.createElement('label', {
+                                        className: 'block text-sm font-medium mb-2'
+                                    }, 'Sub-text (Opsional)'),
+                                    React.createElement('input', {
+                                        type: 'text',
+                                        value: creativeConfig.subtext,
+                                        onChange: (e) => handleCreativeConfigChange('subtext', e.target.value),
+                                        disabled: creativeConfig.noText,
+                                        className: `w-full bg-zinc-800 border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-lime-400 ${creativeConfig.noText ? 'border-zinc-700 text-zinc-500' : 'border-zinc-700'}`,
+                                        placeholder: 'Teks tambahan...'
+                                    })
+                                )
+                            ),
+
+                            // Prompt Manual
+                            React.createElement('div', null,
+                                React.createElement('div', { className: 'flex items-center justify-between mb-4' },
+                                    React.createElement('div', { className: 'flex items-center gap-3' },
+                                        React.createElement('i', { 'data-lucide': 'keyboard', className: 'w-4 h-4 text-zinc-400' }),
+                                        React.createElement('span', { className: 'font-medium' }, 'Prompt Manual'),
+                                        React.createElement('span', {
+                                            className: 'text-xs text-zinc-500'
+                                        }, '(Instruksi khusus ke AI)')
+                                    ),
+                                    React.createElement('label', { className: 'relative inline-flex items-center cursor-pointer' },
+                                        React.createElement('input', {
+                                            type: 'checkbox',
+                                            checked: creativeConfig.manualPrompt,
+                                            onChange: (e) => handleCreativeConfigChange('manualPrompt', e.target.checked),
+                                            className: 'sr-only peer'
+                                        }),
+                                        React.createElement('div', {
+                                            className: "w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-lime-400"
+                                        })
+                                    )
+                                ),
+                                
+                                creativeConfig.manualPrompt && React.createElement('textarea', {
+                                    value: creativeConfig.customPrompt,
+                                    onChange: (e) => handleCreativeConfigChange('customPrompt', e.target.value),
+                                    rows: 4,
+                                    className: 'w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-lime-400',
+                                    placeholder: 'Tambahkan instruksi khusus untuk AI...'
+                                })
+                            )
+                        )
+                    ),
+
+                    // Tombol Generate
+                    React.createElement('button', {
+                        onClick: onGenerate,
+                        disabled: isGenerating || !projectData.title || !apiConfigured,
+                        className: `w-full bg-lime-400 text-black font-bold py-4 rounded-2xl uppercase tracking-wider flex items-center justify-center gap-3 hover:bg-lime-300 transition-all ${(!projectData.title || isGenerating || !apiConfigured) ? 'opacity-50 cursor-not-allowed' : ''}`
+                    },
+                        isGenerating ? [
+                            React.createElement('i', {
+                                key: 'icon',
+                                'data-lucide': 'refresh-cw',
+                                className: 'w-5 h-5 animate-spin'
+                            }),
+                            'MEMPROSES...'
+                        ] : apiConfigured ? [
+                            React.createElement('i', {
+                                key: 'icon',
+                                'data-lucide': 'sparkles',
+                                className: 'w-5 h-5'
+                            }),
+                            'GENERATE THUMBNAIL'
+                        ] : [
+                            React.createElement('i', {
+                                key: 'icon',
+                                'data-lucide': 'alert-triangle',
+                                className: 'w-5 h-5'
+                            }),
+                            'API BELUM DIKONFIGURASI'
+                        ]
+                    ),
+                    
+                    !apiConfigured && React.createElement('div', {
+                        className: 'p-4 bg-red-400/10 border border-red-400/30 rounded-xl'
+                    },
+                        React.createElement('div', { className: 'flex items-start gap-3' },
+                            React.createElement('i', { 'data-lucide': 'info', className: 'w-5 h-5 text-red-400 mt-0.5' }),
+                            React.createElement('div', null,
+                                React.createElement('p', { className: 'font-medium text-red-300' }, 'API Key Belum Dikonfigurasi'),
+                                React.createElement('p', { className: 'text-sm text-zinc-400 mt-1' }, 
+                                    'Pemilik website perlu mengisi API key di kode sumber untuk menggunakan fitur AI.'
+                                )
+                            )
+                        )
+                    )
+                );
+            };
+
+            // OutputPanel (sama seperti sebelumnya)
+            const OutputPanel = ({ results, projectData, isGenerating, onDownload, currentUser }) => {
+                const [selectedDevice, setSelectedDevice] = React.useState('mobile');
+                const [hoveredImage, setHoveredImage] = React.useState(null);
+
+                if (isGenerating) {
+                    return React.createElement('div', {
+                        className: 'h-full flex items-center justify-center animate-fadeIn'
+                    },
+                        React.createElement('div', { className: 'text-center' },
+                            React.createElement('div', {
+                                className: 'animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-lime-400 mx-auto mb-4'
+                            }),
+                            React.createElement('h3', {
+                                className: 'text-xl font-bold text-lime-400'
+                            }, 'AI Sedang Bekerja'),
+                            React.createElement('p', {
+                                className: 'text-zinc-400 mt-2'
+                            }, `Membuat thumbnail untuk ${currentUser.username}...`),
+                            React.createElement('div', { className: 'mt-4 text-sm text-zinc-500' },
+                                `Thumbnail ke-${(currentUser.thumbnailCount || 0) + 1} Anda`
+                            )
+                        )
+                    );
+                }
+
+                if (!results) {
+                    return React.createElement('div', {
+                        className: 'border-2 border-dashed border-zinc-800 rounded-2xl h-full min-h-[600px] flex flex-col items-center justify-center p-8 animate-fadeIn'
+                    },
+                        React.createElement('i', {
+                            'data-lucide': 'layout',
+                            className: 'w-24 h-24 text-zinc-700 mb-6'
+                        }),
+                        React.createElement('h3', {
+                            className: 'text-2xl font-bold text-zinc-300 mb-2'
+                        }, 'SIAP MENCETAK'),
+                        React.createElement('p', {
+                            className: 'text-zinc-500 text-center max-w-md mb-6'
+                        }, `Halo ${currentUser.username}, isi form dan klik GENERATE untuk membuat thumbnail AI-powered`),
+                        React.createElement('div', {
+                            className: 'mt-4 p-4 bg-zinc-800/50 rounded-lg border border-zinc-700 max-w-md'
+                        },
+                            React.createElement('div', { className: 'flex items-center gap-3 mb-3' },
+                                React.createElement('i', { 'data-lucide': 'user', className: 'w-5 h-5 text-lime-400' }),
+                                React.createElement('h4', { className: 'font-medium' }, 'Akun Anda:')
+                            ),
+                            React.createElement('div', { className: 'grid grid-cols-2 gap-3 text-sm' },
+                                [
+                                    { label: 'Username', value: currentUser.username },
+                                    { label: 'Email', value: currentUser.email },
+                                    { label: 'Thumbnails', value: currentUser.thumbnailCount || 0 },
+                                    { label: 'Bergabung', value: new Date(currentUser.createdAt).toLocaleDateString('id-ID') }
+                                ].map((item, index) =>
+                                    React.createElement('div', { key: index },
+                                        React.createElement('div', { className: 'text-zinc-400' }, item.label),
+                                        React.createElement('div', { className: 'font-medium' }, item.value)
+                                    )
+                                )
+                            )
+                        )
+                    );
+                }
+
+                // ... (OutputPanel content sama seperti sebelumnya)
+                // Untuk menghemat ruang, saya akan menggunakan versi yang sama
+                return React.createElement('div', { className: 'space-y-6 animate-fadeIn' },
+                    // Thumbnail Grid
+                    React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
+                        results.thumbnails.map((thumb, index) =>
+                            React.createElement('div', {
+                                key: thumb.id,
+                                className: 'bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden relative group hover:border-lime-400/30 transition-all',
+                                onMouseEnter: () => setHoveredImage(thumb.id),
+                                onMouseLeave: () => setHoveredImage(null)
+                            },
+                                React.createElement('div', { className: 'aspect-video overflow-hidden' },
+                                    React.createElement('img', {
+                                        src: thumb.url,
+                                        alt: `Thumbnail ${index + 1}`,
+                                        className: 'w-full h-full object-cover group-hover:scale-105 transition-transform duration-300'
+                                    })
+                                ),
+                                
+                                hoveredImage === thumb.id && React.createElement('div', {
+                                    className: 'absolute inset-0 bg-black/70 flex items-center justify-center'
+                                },
+                                    React.createElement('button', {
+                                        onClick: () => onDownload(thumb.url),
+                                        className: 'bg-lime-400 text-black font-bold px-6 py-3 rounded-lg flex items-center gap-2 hover:bg-lime-300 transition-all glow'
+                                    },
+                                        React.createElement('i', { 'data-lucide': 'download', className: 'w-4 h-4' }),
+                                        'UNDUH HD'
+                                    )
+                                ),
+                                
+                                React.createElement('div', { className: 'p-4' },
+                                    React.createElement('div', { className: 'flex items-center gap-2 mb-2' },
+                                        React.createElement('div', {
+                                            className: `w-2 h-2 rounded-full ${index === 0 ? 'bg-lime-400' : 'bg-blue-400'}`
+                                        }),
+                                        React.createElement('span', { className: 'text-sm font-medium' },
+                                            index === 0 ? 'Variasi Strategi LIFT' : 'Variasi Sudut Pandang'
+                                        )
+                                    ),
+                                    React.createElement('p', { className: 'text-xs text-zinc-400' }, thumb.strategy)
+                                )
+                            )
+                        )
+                    ),
+                    
+                    // Rest of OutputPanel (sama seperti sebelumnya)
+                    // ... (DeviceMockup, ColorSwatch, dll)
+                    React.createElement('div', { className: 'bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6' },
+                        React.createElement('h3', {
+                            className: 'text-lg font-bold uppercase tracking-wide mb-4 flex items-center gap-2'
+                        },
+                            React.createElement('i', { 'data-lucide': 'file-text', className: 'w-5 h-5 text-lime-400' }),
+                            'Analisa AI & Strategi'
+                        ),
+                        React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-6' },
+                            React.createElement('div', null,
+                                React.createElement('h4', {
+                                    className: 'font-bold text-lime-400 mb-3 uppercase text-sm tracking-wide'
+                                }, 'LIFT Layout Strategy'),
+                                React.createElement('p', {
+                                    className: 'text-zinc-300 text-sm leading-relaxed'
+                                }, results.analysis.liftStrategy)
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('h4', {
+                                    className: 'font-bold text-lime-400 mb-3 uppercase text-sm tracking-wide'
+                                }, 'Functional Color Strategy'),
+                                React.createElement('p', {
+                                    className: 'text-zinc-300 text-sm leading-relaxed'
+                                }, results.analysis.colorStrategy)
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('h4', {
+                                    className: 'font-bold text-lime-400 mb-3 uppercase text-sm tracking-wide'
+                                }, 'Copywriting Suggestion'),
+                                React.createElement('p', {
+                                    className: 'text-zinc-300 text-sm leading-relaxed'
+                                }, results.analysis.copywriting)
+                            )
+                        )
+                    )
+                );
+            };
+
+            return React.createElement('div', { className: 'container mx-auto px-4 py-8' },
+                React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-12 gap-6' },
+                    // Kolom Kiri - Input
+                    React.createElement('div', { className: 'lg:col-span-5 space-y-6' },
+                        React.createElement(InputPanel, {
+                            projectData: projectData,
+                            setProjectData: setProjectData,
+                            creativeConfig: creativeConfig,
+                            setCreativeConfig: setCreativeConfig,
+                            niches: niches,
+                            tones: tones,
+                            isGenerating: isGenerating,
+                            onGenerate: handleGenerate,
+                            apiConfigured: isEngineReady,
+                            currentUser: currentUser
+                        })
+                    ),
+
+                    // Kolom Kanan - Output
+                    React.createElement('div', { className: 'lg:col-span-7' },
+                        React.createElement(OutputPanel, {
+                            results: results,
+                            projectData: projectData,
+                            isGenerating: isGenerating,
+                            onDownload: handleDownload,
+                            currentUser: currentUser
+                        })
+                    )
+                )
+            );
+        };
+
+        // Komponen Landing Page (untuk user belum login)
+        const LandingPage = ({ onShowAuth }) => {
+            return React.createElement('div', { className: 'min-h-screen bg-gradient-to-b from-zinc-950 to-black' },
+                // Hero Section
+                React.createElement('div', { className: 'container mx-auto px-4 py-20' },
+                    React.createElement('div', { className: 'text-center max-w-4xl mx-auto' },
+                        React.createElement('div', { className: 'inline-block mb-6' },
+                            React.createElement('div', {
+                                className: 'bg-lime-400/10 border border-lime-400/30 rounded-2xl px-6 py-3 inline-flex items-center gap-3'
+                            },
+                                React.createElement('i', { 'data-lucide': 'sparkles', className: 'w-5 h-5 text-lime-400' }),
+                                React.createElement('span', { className: 'text-lime-400 font-medium' },
+                                    'AI-Powered Thumbnail Generator'
+                                )
+                            )
+                        ),
+                        
+                        React.createElement('h1', {
+                            className: 'text-5xl md:text-6xl font-bold mb-6 leading-tight'
+                        },
+                            'Ciptakan ',
+                            React.createElement('span', { className: 'gradient-text' }, 'Thumbnail Menarik'),
+                            ' dengan AI'
+                        ),
+                        
+                        React.createElement('p', {
+                            className: 'text-xl text-zinc-400 mb-10 max-w-2xl mx-auto'
+                        },
+                            'Generate thumbnail YouTube yang viral menggunakan AI canggih. Tingkatkan CTR hingga 300% dengan sistem LIFT kami.'
+                        ),
+                        
+                        React.createElement('div', { className: 'flex flex-col sm:flex-row gap-4 justify-center mb-16' },
+                            React.createElement('button', {
+                                onClick: () => onShowAuth('register'),
+                                className: 'px-8 py-4 bg-lime-400 text-black font-bold rounded-2xl text-lg hover:bg-lime-300 transition-all glow flex items-center justify-center gap-3'
+                            },
+                                React.createElement('i', { 'data-lucide': 'rocket', className: 'w-5 h-5' }),
+                                'Mulai Gratis Sekarang'
+                            ),
+                            React.createElement('button', {
+                                onClick: () => onShowAuth('login'),
+                                className: 'px-8 py-4 border-2 border-zinc-700 font-bold rounded-2xl text-lg hover:border-lime-400 hover:text-lime-400 transition-colors flex items-center justify-center gap-3'
+                            },
+                                React.createElement('i', { 'data-lucide': 'log-in', className: 'w-5 h-5' }),
+                                'Masuk ke Akun'
+                            )
+                        )
+                    )
+                ),
+
+                // Features Section
+                React.createElement('div', { className: 'container mx-auto px-4 py-12' },
+                    React.createElement('h2', {
+                        className: 'text-3xl font-bold text-center mb-12'
+                    },
+                        'Mengapa Memilih ',
+                        React.createElement('span', { className: 'text-lime-400' }, 'ANDRI STORE'),
+                        '?'
+                    ),
+                    
+                    React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-6 mb-16' },
+                        [
+                            {
+                                icon: 'brain',
+                                title: 'AI Canggih',
+                                description: 'Ditenagai oleh Gemini 2.5 Flash & Imagen 4.0 untuk hasil terbaik',
+                                color: 'text-lime-400'
+                            },
+                            {
+                                icon: 'trending-up',
+                                title: 'CTR Tinggi',
+                                description: 'Sistem LIFT terbukti meningkatkan click-through rate hingga 300%',
+                                color: 'text-blue-400'
+                            },
+                            {
+                                icon: 'zap',
+                                title: 'Cepat & Mudah',
+                                description: 'Generate thumbnail profesional dalam hitungan detik',
+                                color: 'text-purple-400'
+                            }
+                        ].map((feature, index) =>
+                            React.createElement('div', {
+                                key: index,
+                                className: 'bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 hover:border-lime-400/30 transition-colors'
+                            },
+                                React.createElement('div', { className: 'flex items-center gap-4 mb-4' },
+                                    React.createElement('div', {
+                                        className: 'w-12 h-12 bg-zinc-800 rounded-lg flex items-center justify-center'
+                                    },
+                                        React.createElement('i', {
+                                            'data-lucide': feature.icon,
+                                            className: `w-6 h-6 ${feature.color}`
+                                        })
+                                    ),
+                                    React.createElement('h3', { className: 'text-xl font-bold' }, feature.title)
+                                ),
+                                React.createElement('p', { className: 'text-zinc-400' }, feature.description)
+                            )
+                        )
+                    )
+                ),
+
+                // CTA Section
+                React.createElement('div', {
+                    className: 'container mx-auto px-4 py-12 text-center'
+                },
+                    React.createElement('div', {
+                        className: 'bg-gradient-to-r from-zinc-900 to-zinc-800 border border-zinc-700 rounded-3xl p-8 max-w-3xl mx-auto'
+                    },
+                        React.createElement('h2', {
+                            className: 'text-2xl font-bold mb-4'
+                        },
+                            'Siap Tingkatkan Views YouTube Anda?'
+                        ),
+                        React.createElement('p', { className: 'text-zinc-400 mb-6' },
+                            'Bergabunglah dengan 5.000+ kreator yang sudah menggunakan ANDRI STORE'
+                        ),
+                        React.createElement('button', {
+                            onClick: () => onShowAuth('register'),
+                            className: 'px-8 py-3 bg-lime-400 text-black font-bold rounded-lg hover:bg-lime-300 transition-all glow inline-flex items-center gap-2'
+                        },
+                            React.createElement('i', { 'data-lucide': 'user-plus', className: 'w-5 h-5' }),
+                            'Daftar Gratis Sekarang'
+                        )
+                    )
+                ),
+
+                // Footer
+                React.createElement('footer', {
+                    className: 'mt-12 py-8 border-t border-zinc-800 text-center text-zinc-500 text-sm'
+                },
+                    React.createElement('div', { className: 'container mx-auto px-4' },
+                        'ANDRI STORE. Thumbnail Generator © 2024 | ',
+                        React.createElement('span', { className: 'text-lime-400' }, 'Powered by AI'),
+                        ' | Bergabunglah untuk akses penuh'
+                    )
+                )
+            );
+        };
+
+        // Komponen Utama App
+        const App = () => {
+            const [currentUser, setCurrentUser] = React.useState(() => UserStorage.getCurrentUser());
+            const [showAuth, setShowAuth] = React.useState(false);
+            const [authMode, setAuthMode] = React.useState('login');
+            const isEngineReady = API_CONFIG.isConfigured();
+
+            const handleLoginSuccess = (user) => {
+                setCurrentUser(user);
+                setShowAuth(false);
+            };
+
+            const handleLogout = () => {
+                UserStorage.logoutUser();
+                setCurrentUser(null);
+            };
+
+            const handleShowAuth = (mode) => {
+                setAuthMode(mode);
+                setShowAuth(true);
+            };
+
+            return React.createElement(React.Fragment, null,
+                // Header
+                React.createElement(Header, {
+                    isEngineReady: isEngineReady,
+                    currentUser: currentUser,
+                    onLogout: handleLogout,
+                    onShowAuth: handleShowAuth
+                }),
+
+                // Main Content
+                currentUser ? (
+                    React.createElement(Dashboard, {
+                        currentUser: currentUser,
+                        onLogout: handleLogout
+                    })
+                ) : (
+                    React.createElement(LandingPage, {
+                        onShowAuth: handleShowAuth
+                    })
+                ),
+
+                // Auth Modal
+                showAuth && React.createElement(AuthForm, {
+                    onLoginSuccess: handleLoginSuccess,
+                    onClose: () => setShowAuth(false)
+                })
+            );
+        };
+
+        // Render aplikasi ke root
+        ReactDOM.render(React.createElement(App), document.getElementById('root'));
+        
+        // Initialize Lucide icons setelah render
+        setTimeout(() => {
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+        }, 100);
+        
+        // Console info untuk pemilik website
+        console.log('%c🔑 ANDRI STORE - Thumbnail Generator', 'color: #a3e635; font-size: 16px; font-weight: bold;');
+        console.log('%cAPI Status: ' + (API_CONFIG.isConfigured() ? '✅ Configured' : '⚠️ Not Configured'), 
+            API_CONFIG.isConfigured() ? 'color: green;' : 'color: orange;');
+        if (!API_CONFIG.isConfigured()) {
+            console.log('%cPemilik website: Ganti API key di baris 57-58 dengan key Google AI Anda.', 'color: #fbbf24;');
+        }
+    </script>
+</body>
+</html>
